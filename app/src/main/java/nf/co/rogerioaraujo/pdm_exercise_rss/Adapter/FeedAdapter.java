@@ -38,7 +38,7 @@ public class FeedAdapter extends RecyclerView.Adapter<FeedViewHolder> {
     public void onBindViewHolder(@NonNull FeedViewHolder holder, int position) {
         holder.txtTitle.setText(rssObject.getItems().get(position).getTitle());
         holder.txtPubDate.setText(rssObject.getItems().get(position).getPubDate());
-        holder.txtContent.setText(rssObject.getItems().get(position).getContent());
+        holder.txtContent.setText(rssObject.getItems().get(position).getDescription());
 
         // Open news on browser after click
         holder.setItemClickListener(new ItemClickListener() {
