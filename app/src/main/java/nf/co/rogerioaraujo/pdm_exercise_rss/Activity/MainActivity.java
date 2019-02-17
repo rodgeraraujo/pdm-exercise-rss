@@ -1,13 +1,12 @@
-package nf.co.rogerioaraujo.pdm_exercise_rss;
-
+package nf.co.rogerioaraujo.pdm_exercise_rss.Activity;
 
 import android.annotation.SuppressLint;
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.ProgressDialog;
-import android.content.Context;
+import android.database.Cursor;
 import android.os.AsyncTask;
-import android.os.Handler;
+import android.os.Build;
+import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
@@ -19,47 +18,34 @@ import android.widget.Toast;
 
 import com.google.gson.Gson;
 
+import java.util.Random;
+
 import nf.co.rogerioaraujo.pdm_exercise_rss.Adapter.FeedAdapter;
 import nf.co.rogerioaraujo.pdm_exercise_rss.Common.HTTPDataHandle;
-import nf.co.rogerioaraujo.pdm_exercise_rss.Model.Item;
+import nf.co.rogerioaraujo.pdm_exercise_rss.Helper.DatabaseHelper;
+import nf.co.rogerioaraujo.pdm_exercise_rss.Helper.NotificationHelper;
 import nf.co.rogerioaraujo.pdm_exercise_rss.Model.RSSObject;
+import nf.co.rogerioaraujo.pdm_exercise_rss.R;
 
 public class MainActivity extends AppCompatActivity {
 
     Toolbar toolbar;
     RecyclerView recyclerView;
     RSSObject rssObject;
-    Handler handler;
-    String lastUpdate = "2019-02-09T00:32:28Z";
 
     // RSS Link and Json API
-    private final String RSS_link = "https://www.diariodosertao.com.br/feed/atom";
+    private final String RSS_link = "https://www.diariodosertao.com.br/feed/atom"; // feed from "Diário do Sertão"
     private final String RSS_to_Json_API = "https://api.rss2json.com/v1/api.json?rss_url=";
 
+    // database helper
+    DatabaseHelper databaseHelper;
 
-    String msg = "News updates!";
+    // notification helper
+    NotificationHelper notificationHelper;
 
-    Thread thread = new Thread() {
-        @Override
-        public void run() {
-            while (!isInterrupted()){
-                try {
-                    Thread.sleep(60000);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            loadRSS();
-                            Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
-                        }
-                    });
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    };
-
+    // thread
+    Thread t;
+    int delay = 300000; // 5 minutes in milliseconds
 
 
     @Override
@@ -68,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         toolbar = findViewById(R.id.toolbar);
-        toolbar.setTitle("News");
+        toolbar.setTitle("News from Diário do Sertão");
         setSupportActionBar(toolbar);
 
         recyclerView = findViewById(R.id.recyclerView);
@@ -79,9 +65,33 @@ public class MainActivity extends AppCompatActivity {
 
         loadRSS();
 
-
+        // every 5 min updates the timeline
+        t = new Thread() {
+            @Override
+            public void run() {
+                try {
+                    while (!t.isInterrupted()) {
+                        Thread.sleep(delay);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                int cont = 0;
+                                if (cont >= 0) {
+                                    loadRSS();
+                                }
+                                cont +=1;
+                            }
+                        });
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+        t.start();
     }
 
+    // update the news o timeline on app
     private void loadRSS() {
         @SuppressLint("StaticFieldLeak") AsyncTask<String, String, String> loadRSSAsync
                 = new AsyncTask<String, String, String>() {
@@ -103,6 +113,7 @@ public class MainActivity extends AppCompatActivity {
 
             }
 
+            @RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             protected void onPostExecute(String s) {
                 mDialog.dismiss();
@@ -111,9 +122,19 @@ public class MainActivity extends AppCompatActivity {
                 recyclerView.setAdapter(adapter);
                 adapter.notifyDataSetChanged();
 
-                String nowUpdate = rssObject.getItems().get(0).pubDate;
+                // save data on SQLite
+                String lastDate = rssObject.getItems().get(0).pubDate;
+                Cursor data = databaseHelper.getData();
+                if (data != null)
+                    addData(lastDate);
+                else if (data.getString(1) != lastDate) {
+                    databaseHelper.updateData(lastDate);
 
-                notification(nowUpdate);
+                    // if date is diferent, notify user
+                    notifyUser();
+                }
+
+
             }
         };
 
@@ -122,23 +143,14 @@ public class MainActivity extends AppCompatActivity {
         loadRSSAsync.execute(url_get_data.toString());
     }
 
-    private void notification(String nowUpdate) {
-        if (nowUpdate != lastUpdate){
-            String nTitle = "News RSS";
-            String nSubject = "News...";
-            String nBody = "You have a new notification!";
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void notifyUser() {
+        notificationHelper = new NotificationHelper(this);
 
-            NotificationManager notif=(NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
-            Notification notify=new Notification.Builder
-                    (getApplicationContext()).setContentTitle(nTitle).setContentText(nBody).
-                    setContentTitle(nSubject).setSmallIcon(R.drawable.ic_refresh).build();
-
-            notify.flags |= Notification.FLAG_AUTO_CANCEL;
-            notif.notify(0, notify);
-
-        } else {
-            lastUpdate = rssObject.getItems().get(0).pubDate;
-        }
+        String nTitle = "RSS App";
+        String nBody = "Something new is waiting for you.";
+        Notification.Builder builder = notificationHelper.getRSSChannelNotification(nTitle, nBody);
+        notificationHelper.getManager().notify(new Random().nextInt(), builder.build());
     }
 
     @Override
@@ -154,4 +166,19 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    public void addData(String newItem) {
+        boolean insertData = databaseHelper.addData(newItem);
+
+        if (insertData) {
+            toastMessage("Data succesfully inserted!");
+        } else toastMessage("Something went wrong");
+    }
+
+    public void updateData(String newValue) {
+        databaseHelper.updateData(newValue);
+    }
+
+    private void toastMessage(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
 }
