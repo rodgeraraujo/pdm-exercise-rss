@@ -9,33 +9,67 @@ import android.util.Log;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
 
-    private static final String TAG = "DatabaseHelper";
+    // database info
+    private static final String TAG = "feed_database";
+    private static final String DATABASE_NAME = "feed_database.db";
+    private static final int DATABASE_VERSION = 1;
+    private static final String TABLE_NAME = "FEED_UPDATED";
+    private static final String COL_1 = "ID";
+    private static final String COL_2 = "LAST_UPDATE";
 
-    private static final String TABLE_NAME = "updated";
-    private static final String COL1 = "ID";
-    private static final String COL2 = "lastUpdate";
-
+    // sql queries
+    private static final String CREATE_TABLE = "CREATE TABLE " + TABLE_NAME + " (" + COL_1 + " INTEGER PRIMARY KEY AUTOINCREMENT, " + COL_2 + " TEXT)";
+    private static final String DROP_TABLE = "DROP TABLE IF EXISTS " + TABLE_NAME;
+    private static final String UPDATE_TABLE = "UPDATE " + TABLE_NAME + " SET " + COL_2 + " = ?";
+    private static final String SELECT_TABLE = "SELECT * FROM " + TABLE_NAME;
 
     public DatabaseHelper(Context context) {
-        super(context, TABLE_NAME, null, 1);
+        super(context, DATABASE_NAME, null, DATABASE_VERSION);
     }
 
     @Override
     public void onCreate(SQLiteDatabase db) {
-        String createTable = "CREATE TABLE " + TABLE_NAME + " (ID INTEGER PRIMARY KEY AUTOINCREMENT, " + COL2 + " TEXT)";
+        db.execSQL(CREATE_TABLE);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        String sql = "DROP TABLE IF EXISTS " + TABLE_NAME;
-        db.execSQL(sql);
+        db.execSQL(DROP_TABLE);
         onCreate(db);
     }
 
+    public boolean insertData(String last_date) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(COL_2, last_date);
+        long result = db.insert(TABLE_NAME, null, contentValues);
+        if (result == -1) {
+            return false;
+        } else return true;
+    }
+
+    public Cursor getAllData() {
+        SQLiteDatabase db = this.getWritableDatabase();
+        Cursor res = db.rawQuery(SELECT_TABLE, null);
+        return res;
+    }
+
+    public boolean updateData(String id, String last_date) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(COL_1, id);
+        contentValues.put(COL_2, last_date);
+
+        db.update(TABLE_NAME, contentValues, "ID = ?", new String[]{ id });
+        return true;
+    }
+
+    /*
+    old methods
     public boolean addData(String item) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues contentValues = new ContentValues();
-        contentValues.put(COL2, item);
+        contentValues.put(COL_2, item);
 
         Log.d(TAG, "addData: Adding " + item + " to " + TABLE_NAME);
 
@@ -50,15 +84,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public Cursor getData() {
         SQLiteDatabase db = this.getWritableDatabase();
-        String query = "SELECT * FROM " + TABLE_NAME;
-        Cursor data = db.rawQuery(query, null);
+        Cursor data = db.rawQuery(SELECT_TABLE, null);
         return data;
     }
 
     public void updateData(String newValue) {
         SQLiteDatabase db = this.getWritableDatabase();
-        String query = "UPDATE " + TABLE_NAME + " SET " + COL2 + " = " + newValue;
-
+        String query = UPDATE_TABLE + " = " + newValue;
         db.execSQL(query);
     }
+    */
 }

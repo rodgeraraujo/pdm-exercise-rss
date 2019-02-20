@@ -47,7 +47,6 @@ public class MainActivity extends AppCompatActivity {
     Thread t;
     int delay = 300000; // 5 minutes in milliseconds
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -63,6 +62,9 @@ public class MainActivity extends AppCompatActivity {
 
         recyclerView.setLayoutManager(linearLayoutManager);
 
+        databaseHelper = new DatabaseHelper(this);
+
+        // update feed
         loadRSS();
 
         // every 5 min updates the timeline
@@ -122,35 +124,24 @@ public class MainActivity extends AppCompatActivity {
                 recyclerView.setAdapter(adapter);
                 adapter.notifyDataSetChanged();
 
-                // save data on SQLite
-                String lastDate = rssObject.getItems().get(0).pubDate;
-                Cursor data = databaseHelper.getData();
-                if (data != null)
-                    addData(lastDate);
-                else if (data.getString(1) != lastDate) {
-                    databaseHelper.updateData(lastDate);
 
-                    // if date is diferent, notify user
-                    notifyUser();
+                // verify data and notify user if necessary
+                String last_date = rssObject.getItems().get(0).pubDate;
+                AddData(last_date);
+                Cursor data = databaseHelper.getAllData();
+                data.moveToFirst();
+                if (data.getCount() == 0) {
+                    AddData(last_date);
+                } else if (!data.getString(1).equals(last_date)) {
+                    UpdateData(last_date);
+                    NotifyUser();
                 }
-
-
             }
         };
 
         StringBuilder url_get_data = new StringBuilder(RSS_to_Json_API);
         url_get_data.append(RSS_link);
         loadRSSAsync.execute(url_get_data.toString());
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.O)
-    private void notifyUser() {
-        notificationHelper = new NotificationHelper(this);
-
-        String nTitle = "RSS App";
-        String nBody = "Something new is waiting for you.";
-        Notification.Builder builder = notificationHelper.getRSSChannelNotification(nTitle, nBody);
-        notificationHelper.getManager().notify(new Random().nextInt(), builder.build());
     }
 
     @Override
@@ -166,19 +157,37 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    public void addData(String newItem) {
-        boolean insertData = databaseHelper.addData(newItem);
+    // method to notify user in tray
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void NotifyUser() {
+        notificationHelper = new NotificationHelper(this);
+
+        String nTitle = "RSS App";
+        String nBody = "Something new is waiting for you.";
+        Notification.Builder builder = notificationHelper.getRSSChannelNotification(nTitle, nBody);
+        notificationHelper.getManager().notify(new Random().nextInt(), builder.build());
+    }
+
+    // method to add data on sqlite database
+    public void AddData(String last_date) {
+        boolean insertData = databaseHelper.insertData(last_date);
 
         if (insertData) {
-            toastMessage("Data succesfully inserted!");
-        } else toastMessage("Something went wrong");
+            ToastMessage("Database succesfully updated!");
+        } else ToastMessage("Something went wrong");
     }
 
-    public void updateData(String newValue) {
-        databaseHelper.updateData(newValue);
+    // method to updated data on sqlite database
+    public void UpdateData(String last_date) {
+        boolean isUpdated = databaseHelper.updateData("1", last_date);
+
+        if (isUpdated == true) {
+            ToastMessage("News are updated!");
+        }
     }
 
-    private void toastMessage(String msg) {
+    // method to show toast message
+    private void ToastMessage(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 }
